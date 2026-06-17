@@ -1,0 +1,132 @@
+# plant-monitor-deployment
+
+GitOps deployment of [plant-monitor](https://github.com/owellnitz/plant-monitor)
+to a LAN-only x86 Linux mini PC. Runs the prebuilt GHCR image plus its
+dependencies (Mosquitto, Postgres); no build happens on the device.
+
+```
+CI on owellnitz/plant-monitor (main push)
+   │  builds + pushes ghcr.io/owellnitz/plant-monitor/backend:latest
+   ▼
+GHCR (public)
+   │  Watchtower polls every 5 min ──► recreates `backend` on new :latest
+   ▼
+Mini PC (static LAN IP, no inbound)        ◄── systemd timer: git pull && compose up -d
+   mqtt :1883   db (internal)   backend :80
+        ▲
+   ESP32-C3 firmware publishes to mqtt://<static-ip>:1883
+```
+
+## Two update loops
+
+| Loop | Watches | Mechanism | Cadence |
+|------|---------|-----------|---------|
+| Image | GHCR `:latest` digest | Watchtower, label-scoped to `backend` | 5 min |
+| Config | this git repo | systemd `plant-monitor.timer` → `git pull && docker compose up -d` | 5 min |
+
+The mini PC has no inbound access, so both loops are **pull-based**. Watchtower
+restarts the app on a new image; the git-pull timer applies changes to
+`compose.yml` / `mosquitto.conf`. Watchtower only touches the labeled
+`backend` container — `db` and `mqtt` are never auto-recreated.
+
+## One-time setup on the mini PC
+
+### 1. Static IP
+
+Give the mini PC a fixed LAN address so the firmware's hardcoded
+`mqtt_host` keeps working. Easiest and distro-agnostic is a **DHCP
+reservation** on your router (bind the NIC's MAC to an IP) — recommended.
+
+To set it on the host instead, the method depends on how Debian manages the
+NIC. Check with `ls /etc/NetworkManager/system-connections/ 2>/dev/null` and
+`systemctl is-active NetworkManager systemd-networkd`.
+
+ifupdown — the default on minimal Debian (edit `/etc/network/interfaces`):
+
+```
+iface enp1s0 inet static
+    address 192.168.1.50/24
+    gateway 192.168.1.1
+    dns-nameservers 192.168.1.1
+```
+
+NetworkManager — only if a desktop task was installed:
+
+```sh
+nmcli con mod "<con>" ipv4.method manual \
+  ipv4.addresses 192.168.1.50/24 ipv4.gateway 192.168.1.1 ipv4.dns 192.168.1.1
+nmcli con up "<con>"
+```
+
+Pick an address outside the router's DHCP pool. Note it — call it `<static-ip>`.
+
+### 2. Docker Engine
+
+Minimal Debian lacks `git`/`curl` — install them first:
+
+```sh
+sudo apt update && sudo apt install -y git curl
+curl -fsSL https://get.docker.com | sh
+sudo systemctl enable --now docker
+```
+
+### 3. Clone this repo and set the secret
+
+```sh
+sudo git clone https://github.com/owellnitz/plant-monitor-deployment /opt/plant-monitor-deployment
+cd /opt/plant-monitor-deployment
+sudo cp .env.example .env
+sudo nano .env        # set POSTGRES_PASSWORD: openssl rand -base64 18 | tr '+/' '-_'
+```
+
+`.env` is gitignored — `git pull` never touches it.
+
+### 4. Install the sync timer
+
+```sh
+sudo cp systemd/plant-monitor.service systemd/plant-monitor.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now plant-monitor.timer
+```
+
+First fire (within ~1 min) pulls the images and starts the stack. Verify:
+
+```sh
+sudo systemctl start plant-monitor.service   # force an immediate run
+docker compose -f /opt/plant-monitor-deployment/compose.yml ps
+```
+
+The repo path is hardcoded as `/opt/plant-monitor-deployment` in
+`plant-monitor.service` (`WorkingDirectory`). Clone elsewhere → edit that line.
+
+### 5. Point the firmware at the broker
+
+In `firmware/config.toml` (in the main repo, gitignored):
+
+| Key | Value |
+|-----|-------|
+| `mqtt_host` | `<static-ip>` |
+| `mqtt_port` | `1883` |
+
+Rebuild + flash: `cargo run --release --features net`.
+
+## Day-to-day
+
+- **Ship app changes** → merge to `main` in `owellnitz/plant-monitor`. CI
+  pushes `:latest`; Watchtower pulls it within 5 min. Nothing to do here.
+- **Change the stack** (ports, broker config, add a service) → commit to this
+  repo. The timer applies it within 5 min, or run
+  `sudo systemctl start plant-monitor.service` to apply now.
+- **Logs**: `docker compose logs -f backend`
+- **Watchtower activity**: `docker logs <watchtower-container>`
+- **Web UI**: `http://<static-ip>`
+- **Readings**: `docker compose exec db psql -U plantmonitor -c 'SELECT * FROM readings;'`
+
+## Files
+
+| Path | Purpose |
+|------|---------|
+| `compose.yml` | mqtt + db + backend (GHCR image) + watchtower; app on `:80` |
+| `mosquitto/mosquitto.conf` | Broker config (anonymous, LAN-only) |
+| `.env.example` | Template for `POSTGRES_PASSWORD` |
+| `systemd/plant-monitor.{service,timer}` | Git-pull sync loop |

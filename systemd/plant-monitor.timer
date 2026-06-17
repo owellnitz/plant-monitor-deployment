@@ -1,0 +1,12 @@
+[Unit]
+Description=Periodically sync the plant-monitor deploy repo
+
+[Timer]
+# Run shortly after boot, then every 5 min. Keeps git the source of
+# truth for the compose/config without any inbound access to the mini PC.
+OnBootSec=1min
+OnUnitActiveSec=5min
+Unit=plant-monitor.service
+
+[Install]
+WantedBy=timers.target

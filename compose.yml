@@ -1,0 +1,63 @@
+services:
+  mqtt:
+    image: eclipse-mosquitto:2
+    ports:
+      - "1883:1883"
+    volumes:
+      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - mosquitto-data:/mosquitto/data
+    restart: unless-stopped
+
+  db:
+    image: postgres:18
+    # No published port: the backend reaches the DB over the compose
+    # network. Unlike the dev stack, nothing on the LAN needs psql access.
+    environment:
+      POSTGRES_DB: plantmonitor
+      POSTGRES_USER: plantmonitor
+      # From .env (gitignored) — see .env.example. Only set on first init
+      # of the volume; change it later via ALTER USER, not here.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set in .env}
+    volumes:
+      # PG 18+ convention: mount the parent dir; data lives in a versioned
+      # subdir so a future pg_upgrade --link works in-place.
+      - postgres-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U plantmonitor"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  # Prebuilt image from GHCR (public, no login needed). Bundles the REST
+  # API, the Angular PWA and the MQTT->Postgres ingest worker.
+  backend:
+    image: ghcr.io/owellnitz/plant-monitor/backend:latest
+    ports:
+      - "80:8080"
+    environment:
+      Mqtt__Host: mqtt
+      ConnectionStrings__Db: Host=db;Username=plantmonitor;Password=${POSTGRES_PASSWORD:?set in .env};Database=plantmonitor
+    depends_on:
+      db:
+        condition: service_healthy
+      mqtt:
+        condition: service_started
+    restart: unless-stopped
+    labels:
+      # Only this container is auto-updated by Watchtower; db/mqtt are not.
+      - "com.centurylinklabs.watchtower.enable=true"
+
+  # Polls GHCR every 5 min and recreates the backend container when a new
+  # :latest is pushed by CI. --label-enable scopes it to the labeled
+  # service only; --cleanup removes the superseded image afterwards.
+  watchtower:
+    image: containrrr/watchtower
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: --interval 300 --label-enable --cleanup
+    restart: unless-stopped
+
+volumes:
+  postgres-data:
+  mosquitto-data:

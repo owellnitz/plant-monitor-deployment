@@ -1,0 +1,18 @@
+[Unit]
+Description=Sync plant-monitor deploy repo and apply the compose stack
+After=docker.service network-online.target
+Requires=docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# Adjust if you clone the repo elsewhere (see README).
+WorkingDirectory=/opt/plant-monitor-deployment
+# Git is the source of truth for the stack definition. Pull first, then
+# apply. Watchtower handles image updates separately; this catches
+# compose.yml / mosquitto.conf changes pushed to the repo.
+ExecStart=/usr/bin/git pull --ff-only
+ExecStart=/usr/bin/docker compose up -d --remove-orphans
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,10 @@
+# Secrets — never commit. Keep the template.
+.env*
+!.env.example
+
+# macOS
+.DS_Store
+
+# Editors
+.idea/
+.vscode/
