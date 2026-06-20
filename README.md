@@ -37,20 +37,28 @@ Give the mini PC a fixed LAN address so the firmware's hardcoded
 `mqtt_host` keeps working. Easiest and distro-agnostic is a **DHCP
 reservation** on your router (bind the NIC's MAC to an IP) — recommended.
 
-To set it on the host instead, the method depends on how Debian manages the
-NIC. Check with `ls /etc/NetworkManager/system-connections/ 2>/dev/null` and
-`systemctl is-active NetworkManager systemd-networkd`.
+To set it on the host instead, Ubuntu manages the NIC with **Netplan**. Find
+your interface name with `ip -br link`, then edit the Netplan file under
+`/etc/netplan/` (e.g. `/etc/netplan/01-netcfg.yaml` on Server, or the
+`*NetworkManager*.yaml` on Desktop):
 
-ifupdown — the default on minimal Debian (edit `/etc/network/interfaces`):
-
+```yaml
+network:
+  version: 2
+  ethernets:
+    enp1s0:
+      dhcp4: false
+      addresses: [192.168.1.50/24]
+      routes:
+        - to: default
+          via: 192.168.1.1
+      nameservers:
+        addresses: [192.168.1.1]
 ```
-iface enp1s0 inet static
-    address 192.168.1.50/24
-    gateway 192.168.1.1
-    dns-nameservers 192.168.1.1
-```
 
-NetworkManager — only if a desktop task was installed:
+Apply with `sudo netplan apply` (preview first with `sudo netplan try`).
+
+NetworkManager — only on Ubuntu Desktop, if you prefer `nmcli`:
 
 ```sh
 nmcli con mod "<con>" ipv4.method manual \
@@ -62,7 +70,7 @@ Pick an address outside the router's DHCP pool. Note it — call it `<static-ip>
 
 ### 2. Docker Engine
 
-Minimal Debian lacks `git`/`curl` — install them first:
+Minimal Ubuntu may lack `git`/`curl` — install them first:
 
 ```sh
 sudo apt update && sudo apt install -y git curl
