@@ -37,16 +37,17 @@ Give the mini PC a fixed LAN address so the firmware's hardcoded
 `mqtt_host` keeps working. Easiest and distro-agnostic is a **DHCP
 reservation** on your router (bind the NIC's MAC to an IP) — recommended.
 
-To set it on the host instead, Ubuntu manages the NIC with **Netplan**. Find
-your interface name with `ip -br link`, then edit the Netplan file under
-`/etc/netplan/` (e.g. `/etc/netplan/01-netcfg.yaml` on Server, or the
-`*NetworkManager*.yaml` on Desktop):
+To set it on the host instead, Ubuntu manages the NIC with **Netplan**. The
+mini PC is on WiFi, so use a `wifis:` block — it must carry the SSID +
+passphrase, otherwise the interface won't associate. Find the interface name
+with `ip -br link` (WiFi NICs show as `wl...`), then edit the Netplan file
+under `/etc/netplan/` (e.g. `/etc/netplan/01-netcfg.yaml`):
 
 ```yaml
 network:
   version: 2
-  ethernets:
-    enp1s0:
+  wifis:
+    <wifi-iface>:
       dhcp4: false
       addresses: [192.168.1.50/24]
       routes:
@@ -54,9 +55,14 @@ network:
           via: 192.168.1.1
       nameservers:
         addresses: [192.168.1.1]
+      access-points:
+        "YOUR_SSID":
+          password: "YOUR_WIFI_PASSWORD"
 ```
 
-Apply with `sudo netplan apply` (preview first with `sudo netplan try`).
+Netplan drives WiFi via `wpa_supplicant` — make sure it's installed
+(`sudo apt install -y wpasupplicant`). Apply with `sudo netplan apply`
+(preview first with `sudo netplan try`).
 
 NetworkManager — only on Ubuntu Desktop, if you prefer `nmcli`:
 
