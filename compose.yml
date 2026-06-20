@@ -54,6 +54,11 @@ services:
   # service only; --cleanup removes the superseded image afterwards.
   watchtower:
     image: containrrr/watchtower
+    environment:
+      # containrrr/watchtower is stale; its built-in Docker client negotiates
+      # API 1.25, which newer daemons reject (min 1.40). Pin the version it
+      # sends so it can talk to the host daemon.
+      DOCKER_API_VERSION: "1.40"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       # Private GHCR image: Watchtower reads the host's root docker login to
