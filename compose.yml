@@ -29,8 +29,9 @@ services:
       retries: 10
     restart: unless-stopped
 
-  # Prebuilt image from GHCR (public, no login needed). Bundles the REST
-  # API, the Angular PWA and the MQTT->Postgres ingest worker.
+  # Prebuilt image from GHCR (private — needs `docker login ghcr.io`, see
+  # README). Bundles the REST API, the Angular PWA and the MQTT->Postgres
+  # ingest worker.
   backend:
     image: ghcr.io/owellnitz/plant-monitor/backend:latest
     ports:
@@ -55,6 +56,10 @@ services:
     image: containrrr/watchtower
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+      # Private GHCR image: Watchtower reads the host's root docker login to
+      # pull :latest. Run `sudo docker login ghcr.io` BEFORE the first
+      # `compose up`, else this bind mount creates a directory and auth fails.
+      - /root/.docker/config.json:/config.json:ro
     command: --interval 300 --label-enable --cleanup
     restart: unless-stopped
 

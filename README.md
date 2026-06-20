@@ -8,7 +8,7 @@ dependencies (Mosquitto, Postgres); no build happens on the device.
 CI on owellnitz/plant-monitor (main push)
    │  builds + pushes ghcr.io/owellnitz/plant-monitor/backend:latest
    ▼
-GHCR (public)
+GHCR (private — PAT pull)
    │  Watchtower polls every 5 min ──► recreates `backend` on new :latest
    ▼
 Mini PC (static LAN IP, no inbound)        ◄── systemd timer: git pull && compose up -d
@@ -84,18 +84,49 @@ curl -fsSL https://get.docker.com | sh
 sudo systemctl enable --now docker
 ```
 
-### 3. Clone this repo and set the secret
+### 3. GitHub token (private repos)
+
+Both this deploy repo and the GHCR backend image are **private**, so the mini
+PC needs a token to pull them. One classic PAT covers both. Create one at
+GitHub → Settings → Developer settings → **Personal access tokens (classic)**
+with scopes:
+
+- `repo` — clone/pull this private deploy repo
+- `read:packages` — pull the private GHCR image (`repo` alone is **not** enough)
+
+Call it `<TOKEN>` below.
+
+### 4. Clone this repo and set the secret
 
 ```sh
-sudo git clone https://github.com/owellnitz/plant-monitor-deployment /opt/plant-monitor-deployment
+sudo git clone https://<TOKEN>@github.com/owellnitz/plant-monitor-deployment.git /opt/plant-monitor-deployment
 cd /opt/plant-monitor-deployment
 sudo cp .env.example .env
 sudo nano .env        # set POSTGRES_PASSWORD: openssl rand -base64 18 | tr '+/' '-_'
 ```
 
+The token is stored in `/opt/plant-monitor-deployment/.git/config` (root-only),
+so future `sudo git pull` authenticates automatically. To rotate it later:
+`sudo git remote set-url origin https://<NEW_TOKEN>@github.com/owellnitz/plant-monitor-deployment.git`.
 `.env` is gitignored — `git pull` never touches it.
 
-### 4. Install the sync timer
+### 5. Log in to GHCR (root)
+
+The systemd service runs `docker compose` as **root**, so root must hold the
+GHCR creds. Do this *before* the first `compose up`:
+
+```sh
+echo <TOKEN> | sudo docker login ghcr.io -u owellnitz --password-stdin
+```
+
+Writes `/root/.docker/config.json` — which `compose up` uses to pull `backend`,
+and which Watchtower reads via the bind mount in `compose.yml` to pull updates.
+
+If login "succeeds" but pulls still 401, a credential helper hijacked the
+creds. Check `sudo cat /root/.docker/config.json` for `credsStore`; if present,
+remove that line and re-run the login so the auth blob is written inline.
+
+### 6. Install the sync timer
 
 ```sh
 sudo cp systemd/plant-monitor.service systemd/plant-monitor.timer /etc/systemd/system/
@@ -113,7 +144,7 @@ docker compose -f /opt/plant-monitor-deployment/compose.yml ps
 The repo path is hardcoded as `/opt/plant-monitor-deployment` in
 `plant-monitor.service` (`WorkingDirectory`). Clone elsewhere → edit that line.
 
-### 5. Point the firmware at the broker
+### 7. Point the firmware at the broker
 
 In `firmware/config.toml` (in the main repo, gitignored):
 
