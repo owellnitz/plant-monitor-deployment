@@ -4,6 +4,12 @@ GitOps deployment of [plant-monitor](https://github.com/owellnitz/plant-monitor)
 to a LAN-only x86 Linux mini PC. Runs the prebuilt GHCR image plus its
 dependencies (Mosquitto, Postgres); no build happens on the device.
 
+> **Disclaimer:** Personal hobby project, published as-is for reference — no
+> warranty, no support. The stack assumes a trusted home LAN with no inbound
+> access: the MQTT broker allows anonymous connections and the web UI is plain
+> HTTP. Do not expose it to the internet without adding auth and TLS. Adapt
+> IPs, names and paths to your own setup.
+
 ```
 CI on owellnitz/plant-monitor (main push)
    │  builds + pushes ghcr.io/owellnitz/plant-monitor/backend:latest
@@ -84,30 +90,26 @@ curl -fsSL https://get.docker.com | sh
 sudo systemctl enable --now docker
 ```
 
-### 3. GitHub token (private repos)
+### 3. GitHub token (GHCR image)
 
-Both this deploy repo and the GHCR backend image are **private**, so the mini
-PC needs a token to pull them. One classic PAT covers both. Create one at
+This deploy repo is public, but the GHCR backend image is **private**, so the
+mini PC needs a token to pull it. Create one at
 GitHub → Settings → Developer settings → **Personal access tokens (classic)**
-with scopes:
+with the single scope:
 
-- `repo` — clone/pull this private deploy repo
-- `read:packages` — pull the private GHCR image (`repo` alone is **not** enough)
+- `read:packages` — pull the private GHCR image
 
 Call it `<TOKEN>` below.
 
 ### 4. Clone this repo and set the secret
 
 ```sh
-sudo git clone https://<TOKEN>@github.com/owellnitz/plant-monitor-deployment.git /opt/plant-monitor-deployment
+sudo git clone https://github.com/owellnitz/plant-monitor-deployment.git /opt/plant-monitor-deployment
 cd /opt/plant-monitor-deployment
 sudo cp .env.example .env
 sudo nano .env        # set POSTGRES_PASSWORD: openssl rand -base64 18 | tr '+/' '-_'
 ```
 
-The token is stored in `/opt/plant-monitor-deployment/.git/config` (root-only),
-so future `sudo git pull` authenticates automatically. To rotate it later:
-`sudo git remote set-url origin https://<NEW_TOKEN>@github.com/owellnitz/plant-monitor-deployment.git`.
 `.env` is gitignored — `git pull` never touches it.
 
 ### 5. Log in to GHCR (root)
