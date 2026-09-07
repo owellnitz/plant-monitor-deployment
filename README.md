@@ -202,11 +202,12 @@ docker compose -f /opt/plant-monitor-deployment/compose.yml ps
 The repo path is hardcoded as `/opt/plant-monitor-deployment` in
 `plant-monitor.service` (`WorkingDirectory`). Clone elsewhere → edit that line.
 
-**The units are copies, not symlinks.** The sync loop applies `compose.yml` and
-`mosquitto.conf` from git, but it cannot update itself: a change to
-`systemd/plant-monitor.{service,timer}` in this repo only takes effect after
-re-running the `cp` and `daemon-reload` above. Worth checking after any pull
-that touched `systemd/`.
+**The units are copies, not symlinks** — systemd reads them from
+`/etc/systemd/system`, not from the repo. The service therefore reinstalls them
+itself when they differ from git and reloads systemd, so a pulled change to
+`systemd/` takes effect from the following run. The `cp` above is only needed
+for this first install, and once more if the self-sync step itself is ever
+changed in a way the installed copy predates.
 
 ### 8. Point the firmware at the broker
 
