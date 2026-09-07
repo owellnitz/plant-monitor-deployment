@@ -6,9 +6,9 @@ dependencies (Mosquitto, Postgres); no build happens on the device.
 
 > **Disclaimer:** Personal hobby project, published as-is for reference — no
 > warranty, no support. The stack assumes a trusted home LAN with no inbound
-> access: the MQTT broker allows anonymous connections and the web UI is plain
-> HTTP. Do not expose it to the internet without adding auth and TLS. Adapt
-> IPs, names and paths to your own setup.
+> access: the MQTT broker allows anonymous connections and the web UI has no
+> auth. Do not expose it to the internet without adding auth. Adapt IPs, names
+> and paths to your own setup.
 
 ```
 CI on owellnitz/plant-monitor (main push)
@@ -18,9 +18,9 @@ GHCR (private — PAT pull)
    │  Watchtower polls every 5 min ──► recreates `backend` on new :latest
    ▼
 Mini PC (static LAN IP, no inbound)        ◄── systemd timer: git pull && compose up -d
-   mqtt :1883   db (internal)   backend :80
-        ▲
-   ESP32-C3 firmware publishes to mqtt://<static-ip>:1883
+   mqtt :1883   db (internal)   backend (internal)   caddy :80/:443
+        ▲                                                 │
+   ESP32-C3 publishes to mqtt://<static-ip>:1883           └─ https://<PLANT_HOST>
 ```
 
 ## Two update loops
@@ -101,18 +101,51 @@ with the single scope:
 
 Call it `<TOKEN>` below.
 
-### 4. Clone this repo and set the secret
+### 4. HTTPS hostname (deSEC)
+
+The frontend is a PWA. Service workers and the Web Push API only run in a
+**secure context**, which `http://<static-ip>` is not — so without TLS there
+are no push notifications. Caddy solves this with a real Let's Encrypt
+certificate while the mini PC stays LAN-only.
+
+That works because of the **DNS-01** challenge: Let's Encrypt never connects to
+the mini PC, it only reads a TXT record that Caddy writes via the deSEC API. So
+the hostname may resolve to a private address and no port is forwarded.
+
+1. Register a free domain at [desec.io](https://desec.io) → **dynDNS**, e.g.
+   `plants.dedyn.io`. Call it `<PLANT_HOST>`.
+2. Set its `A` record to the mini PC's `<static-ip>` (e.g. `192.168.1.50`).
+3. Create a token under **Token management**, scoped to that domain. Call it
+   `<DESEC_TOKEN>`.
+
+**Router: DNS rebind protection.** Most routers drop public DNS answers that
+resolve to a private IP, so `<PLANT_HOST>` will not resolve on the LAN until
+it is whitelisted. On a FRITZ!Box: *Heimnetz → Netzwerk →
+Netzwerkeinstellungen → DNS-Rebind-Schutz* → add `<PLANT_HOST>`. Verify from a
+LAN client:
+
+```sh
+nslookup <PLANT_HOST>     # must answer with <static-ip>
+```
+
+### 5. Clone this repo and set the secrets
 
 ```sh
 sudo git clone https://github.com/owellnitz/plant-monitor-deployment.git /opt/plant-monitor-deployment
 cd /opt/plant-monitor-deployment
 sudo cp .env.example .env
-sudo nano .env        # set POSTGRES_PASSWORD: openssl rand -base64 18 | tr '+/' '-_'
+sudo nano .env
 ```
+
+| Variable | Value |
+|----------|-------|
+| `POSTGRES_PASSWORD` | `openssl rand -base64 18 \| tr '+/' '-_'` |
+| `PLANT_HOST` | the deSEC hostname from step 4 |
+| `DESEC_TOKEN` | the deSEC token from step 4 |
 
 `.env` is gitignored — `git pull` never touches it.
 
-### 5. Log in to GHCR (root)
+### 6. Log in to GHCR (root)
 
 The systemd service runs `docker compose` as **root**, so root must hold the
 GHCR creds. Do this *before* the first `compose up`:
@@ -128,7 +161,7 @@ If login "succeeds" but pulls still 401, a credential helper hijacked the
 creds. Check `sudo cat /root/.docker/config.json` for `credsStore`; if present,
 remove that line and re-run the login so the auth blob is written inline.
 
-### 6. Install the sync timer
+### 7. Install the sync timer
 
 ```sh
 sudo cp systemd/plant-monitor.service systemd/plant-monitor.timer /etc/systemd/system/
@@ -136,7 +169,8 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now plant-monitor.timer
 ```
 
-First fire (within ~1 min) pulls the images and starts the stack. Verify:
+First fire (within ~1 min) pulls the images, builds the Caddy image (~1 min,
+cached afterwards) and starts the stack. Verify:
 
 ```sh
 sudo systemctl start plant-monitor.service   # force an immediate run
@@ -146,7 +180,7 @@ docker compose -f /opt/plant-monitor-deployment/compose.yml ps
 The repo path is hardcoded as `/opt/plant-monitor-deployment` in
 `plant-monitor.service` (`WorkingDirectory`). Clone elsewhere → edit that line.
 
-### 7. Point the firmware at the broker
+### 8. Point the firmware at the broker
 
 In `firmware/config.toml` (in the main repo, gitignored):
 
@@ -166,14 +200,18 @@ Rebuild + flash: `cargo run --release --features net`.
   `sudo systemctl start plant-monitor.service` to apply now.
 - **Logs**: `docker compose logs -f backend`
 - **Watchtower activity**: `docker logs <watchtower-container>`
-- **Web UI**: `http://<static-ip>`
+- **Certificate issuance / renewal**: `docker compose logs -f caddy`
+- **Web UI**: `https://<PLANT_HOST>` — use this, not the IP. The IP is plain
+  HTTP and a certificate mismatch, so the PWA loses push there.
 - **Readings**: `docker compose exec db psql -U plantmonitor -c 'SELECT * FROM readings;'`
 
 ## Files
 
 | Path | Purpose |
 |------|---------|
-| `compose.yml` | mqtt + db + backend (GHCR image) + watchtower; app on `:80` |
+| `compose.yml` | mqtt + db + backend (GHCR image) + caddy + watchtower; app on `:443` |
+| `caddy/Dockerfile` | Caddy rebuilt with the deSEC DNS module (for DNS-01) |
+| `caddy/Caddyfile` | TLS termination + reverse proxy to `backend:8080` |
 | `mosquitto/mosquitto.conf` | Broker config (anonymous, LAN-only) |
-| `.env.example` | Template for `POSTGRES_PASSWORD` |
+| `.env.example` | Template for `POSTGRES_PASSWORD`, `PLANT_HOST`, `DESEC_TOKEN` |
 | `systemd/plant-monitor.{service,timer}` | Git-pull sync loop |
