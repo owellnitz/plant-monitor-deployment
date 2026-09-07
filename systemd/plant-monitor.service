@@ -12,7 +12,14 @@ WorkingDirectory=/opt/plant-monitor-deployment
 # apply. Watchtower handles image updates separately; this catches
 # compose.yml / mosquitto.conf changes pushed to the repo.
 ExecStart=/usr/bin/git pull --ff-only
-ExecStart=/usr/bin/docker compose up -d --remove-orphans
+# --build so a pulled change to caddy/Dockerfile or the pinned Caddy version
+# actually takes effect. It is a cache hit and a no-op when nothing changed.
+ExecStart=/usr/bin/docker compose up -d --remove-orphans --build
+# systemd reads units from /etc/systemd/system, not from the repo, so the sync
+# loop cannot otherwise update itself. Reinstall them when they differ; the
+# reload takes effect from the next run. Deliberately last, so a failure here
+# can never stop the stack above from being applied.
+ExecStart=/bin/sh -c 'cmp -s systemd/plant-monitor.service /etc/systemd/system/plant-monitor.service && cmp -s systemd/plant-monitor.timer /etc/systemd/system/plant-monitor.timer || { cp systemd/plant-monitor.service systemd/plant-monitor.timer /etc/systemd/system/ && systemctl daemon-reload; }'
 
 [Install]
 WantedBy=multi-user.target
