@@ -1,0 +1,19 @@
+# TLS terminator in front of the backend. It exists for one reason: the
+# Angular PWA needs a secure context. Service workers and the Web Push API
+# are unavailable over plain http://<lan-ip>, so no push notifications.
+#
+# PLANT_HOST is a free deSEC hostname (e.g. plants.dedyn.io) whose A record
+# points at this machine's *private* LAN IP. Public DNS answering with a
+# private address is fine — nothing outside the LAN can route to it.
+{$PLANT_HOST} {
+	# DNS-01 challenge instead of the default HTTP-01: Let's Encrypt never
+	# connects to this host, it only reads a TXT record that Caddy creates
+	# through the deSEC API. So no port has to be forwarded on the router.
+	tls {
+		dns desec {
+			token {env.DESEC_TOKEN}
+		}
+	}
+
+	reverse_proxy backend:8080
+}
