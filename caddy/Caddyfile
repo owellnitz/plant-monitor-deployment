@@ -17,3 +17,18 @@
 
 	reverse_proxy backend:8080
 }
+
+# The ESP32 speaks raw HTTP/1.0 over a plain socket — it has no TLS stack and
+# no DNS, so it asks for firmware at http://<lan-ip>:80. Keep exactly those
+# endpoints reachable there. Everything else on the IP is bounced to the HTTPS
+# origin, so an old bookmark still lands on a working PWA.
+http://{$PLANT_IP} {
+	@ota path /api/firmware/*
+	handle @ota {
+		reverse_proxy backend:8080
+	}
+
+	handle {
+		redir https://{$PLANT_HOST}{uri}
+	}
+}

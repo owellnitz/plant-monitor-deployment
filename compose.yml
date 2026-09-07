@@ -63,6 +63,9 @@ services:
       PLANT_HOST: ${PLANT_HOST:?set in .env}
       # deSEC API token, scoped to that domain. From .env (gitignored).
       DESEC_TOKEN: ${DESEC_TOKEN:?set in .env}
+      # This machine's static LAN IP. Must match the firmware's mqtt_host,
+      # which is also where the ESP32 fetches OTA images over plain HTTP.
+      PLANT_IP: ${PLANT_IP:?set in .env}
     volumes:
       - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-data:/data
