@@ -128,17 +128,24 @@ static and must keep pointing at the private `<static-ip>`; Caddy never touches
 it.
 
 **Router: DNS rebind protection.** Many routers drop public DNS answers that
-resolve to a private IP, so `<PLANT_HOST>` may not resolve on the LAN. On a
-FRITZ!Box, whitelist it under *Heimnetz → Netzwerk → Netzwerkeinstellungen →
-DNS-Rebind-Schutz*. A Vodafone Station has no such setting and usually passes
-the answer through. Verify from a LAN client either way:
+resolve to a private IP, so `<PLANT_HOST>` will not resolve on the LAN until
+that is dealt with. Verify from a LAN client:
 
 ```sh
-nslookup <PLANT_HOST>     # must answer with <static-ip>
+dig +short @ns1.desec.io <PLANT_HOST> A   # the record itself
+dig +short @1.1.1.1      <PLANT_HOST> A   # a resolver that does not filter
+dig +short               <PLANT_HOST> A   # the router's resolver
 ```
 
-If it does not resolve, retry against `1.1.1.1` to tell the router apart from
-the upstream resolver, then set a public resolver on the router or per device.
+The record is fine if the first two answer with `<static-ip>`. If only the
+third is empty — typically `status: NOERROR` with `ANSWER: 0` — the router is
+stripping the private address.
+
+- **FRITZ!Box**: whitelist the name under *Heimnetz → Netzwerk →
+  Netzwerkeinstellungen → DNS-Rebind-Schutz*.
+- **Vodafone Station**: filters, and exposes no setting for it. Either hand
+  clients a public resolver over DHCP if the firmware allows it, or set DNS
+  (e.g. `1.1.1.1`) manually per device in its Wi-Fi settings.
 
 ### 5. Clone this repo and set the secrets
 
