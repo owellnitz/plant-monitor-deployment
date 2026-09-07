@@ -118,17 +118,27 @@ the hostname may resolve to a private address and no port is forwarded.
    `plants.dedyn.io`. Call it `<PLANT_HOST>`.
 2. Set its `A` record to the mini PC's `<static-ip>` (e.g. `192.168.1.50`).
 3. Create a token under **Token management**, scoped to that domain. Call it
-   `<DESEC_TOKEN>`.
+   `<DESEC_TOKEN>`. Caddy only ever writes `_acme-challenge` `TXT` records, so
+   the token can be restricted to those.
 
-**Router: DNS rebind protection.** Most routers drop public DNS answers that
-resolve to a private IP, so `<PLANT_HOST>` will not resolve on the LAN until
-it is whitelisted. On a FRITZ!Box: *Heimnetz → Netzwerk →
-Netzwerkeinstellungen → DNS-Rebind-Schutz* → add `<PLANT_HOST>`. Verify from a
-LAN client:
+**Do not run a dynDNS client against this domain.** deSEC hands out
+`update.dedyn.io` credentials on signup, and a router configured with them
+would replace the `A` record with the *public* WAN address. The record here is
+static and must keep pointing at the private `<static-ip>`; Caddy never touches
+it.
+
+**Router: DNS rebind protection.** Many routers drop public DNS answers that
+resolve to a private IP, so `<PLANT_HOST>` may not resolve on the LAN. On a
+FRITZ!Box, whitelist it under *Heimnetz → Netzwerk → Netzwerkeinstellungen →
+DNS-Rebind-Schutz*. A Vodafone Station has no such setting and usually passes
+the answer through. Verify from a LAN client either way:
 
 ```sh
 nslookup <PLANT_HOST>     # must answer with <static-ip>
 ```
+
+If it does not resolve, retry against `1.1.1.1` to tell the router apart from
+the upstream resolver, then set a public resolver on the router or per device.
 
 ### 5. Clone this repo and set the secrets
 
