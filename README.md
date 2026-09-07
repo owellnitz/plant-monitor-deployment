@@ -20,7 +20,9 @@ GHCR (private — PAT pull)
 Mini PC (static LAN IP, no inbound)        ◄── systemd timer: git pull && compose up -d
    mqtt :1883   db (internal)   backend (internal)   caddy :80/:443
         ▲                                                 │
-   ESP32-C3 publishes to mqtt://<static-ip>:1883           └─ https://<PLANT_HOST>
+        │                          https://<PLANT_HOST> ──┤  browsers (PWA)
+        │                     http://<static-ip>/api/firmware ──┘  ESP32 OTA
+   ESP32-C3 publishes to mqtt://<static-ip>:1883
 ```
 
 ## Two update loops
@@ -142,8 +144,11 @@ sudo nano .env
 | `POSTGRES_PASSWORD` | `openssl rand -base64 18 \| tr '+/' '-_'` |
 | `PLANT_HOST` | the deSEC hostname from step 4 |
 | `DESEC_TOKEN` | the deSEC token from step 4 |
+| `PLANT_IP` | `<static-ip>` from step 1 — must equal the firmware's `mqtt_host` |
 
-`.env` is gitignored — `git pull` never touches it.
+`.env` is gitignored — `git pull` never touches it. All four are mandatory:
+`compose up` aborts if one is missing, so set them **before** the sync timer
+pulls a commit that needs them.
 
 ### 6. Log in to GHCR (root)
 
@@ -201,8 +206,12 @@ Rebuild + flash: `cargo run --release --features net`.
 - **Logs**: `docker compose logs -f backend`
 - **Watchtower activity**: `docker logs <watchtower-container>`
 - **Certificate issuance / renewal**: `docker compose logs -f caddy`
-- **Web UI**: `https://<PLANT_HOST>` — use this, not the IP. The IP is plain
-  HTTP and a certificate mismatch, so the PWA loses push there.
+- **Web UI**: `https://<PLANT_HOST>` — use this, not the IP. `http://<static-ip>`
+  redirects there, and only a secure origin gets a service worker and push.
+- **OTA**: the ESP32 has no TLS stack, so `/api/firmware/*` stays reachable on
+  plain `http://<static-ip>` — that one path is deliberately not redirected.
+  Devices need no reprovisioning. Check with:
+  `curl http://<static-ip>/api/firmware/latest?current=firmware-v0.0.0`
 - **Readings**: `docker compose exec db psql -U plantmonitor -c 'SELECT * FROM readings;'`
 
 ## Files
