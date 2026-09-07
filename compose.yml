@@ -34,8 +34,9 @@ services:
   # ingest worker.
   backend:
     image: ghcr.io/owellnitz/plant-monitor/backend:latest
-    ports:
-      - "80:8080"
+    # No published port: Caddy terminates TLS and reaches the backend over
+    # the compose network. Exposing 8080 on the LAN again would give clients
+    # a plain-http origin, where the PWA loses its service worker and push.
     environment:
       Mqtt__Host: mqtt
       ConnectionStrings__Db: Host=db;Username=plantmonitor;Password=${POSTGRES_PASSWORD:?set in .env};Database=plantmonitor
@@ -48,6 +49,27 @@ services:
     labels:
       # Only this container is auto-updated by Watchtower; db/mqtt are not.
       - "com.centurylinklabs.watchtower.enable=true"
+
+  # HTTPS entrypoint. Built locally because the deSEC DNS module is not in
+  # the upstream image — see caddy/Dockerfile. Certificates and the ACME
+  # account key live in caddy-data, so renewals survive a recreate.
+  caddy:
+    build: ./caddy
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      # e.g. plants.dedyn.io — its A record points at this machine's LAN IP.
+      PLANT_HOST: ${PLANT_HOST:?set in .env}
+      # deSEC API token, scoped to that domain. From .env (gitignored).
+      DESEC_TOKEN: ${DESEC_TOKEN:?set in .env}
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - backend
+    restart: unless-stopped
 
   # Polls GHCR every 5 min and recreates the backend container when a new
   # :latest is pushed by CI. --label-enable scopes it to the labeled
@@ -71,3 +93,5 @@ services:
 volumes:
   postgres-data:
   mosquitto-data:
+  caddy-data:
+  caddy-config:
