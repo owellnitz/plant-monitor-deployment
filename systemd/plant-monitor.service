@@ -12,7 +12,9 @@ WorkingDirectory=/opt/plant-monitor-deployment
 # apply. Watchtower handles image updates separately; this catches
 # compose.yml / mosquitto.conf changes pushed to the repo.
 ExecStart=/usr/bin/git pull --ff-only
-ExecStart=/usr/bin/docker compose up -d --remove-orphans
+# --build so a pulled change to caddy/Dockerfile or the pinned Caddy version
+# actually takes effect. It is a cache hit and a no-op when nothing changed.
+ExecStart=/usr/bin/docker compose up -d --remove-orphans --build
 
 [Install]
 WantedBy=multi-user.target
