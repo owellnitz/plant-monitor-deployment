@@ -121,27 +121,27 @@ The hostname appears in public Certificate Transparency logs. Informational
 only — the address is unroutable from outside and nothing listens for external
 connections.
 
-### 5. DNS rebind protection
+### 5. Check that the name resolves on the LAN
 
-A public name resolving to a private IP is the signature of a DNS rebinding
-attack, so many routers strip the answer. Check from a LAN client:
+A public name resolving to a private IP is also the signature of a DNS
+rebinding attack, so some routers strip the answer. Check from a LAN client:
 
 ```sh
 dig +short @ns1.desec.io <PLANT_HOST> A   # the record itself
-dig +short @1.1.1.1      <PLANT_HOST> A   # a resolver that does not filter
 dig +short               <PLANT_HOST> A   # the router's resolver
 ```
 
-If the first two return `<static-ip>` and the third is empty (`NOERROR` with
-`ANSWER: 0`), the router is filtering. Fixes, in order of preference:
+Both must return `<static-ip>`.
 
-1. Configure the router to hand clients a public resolver over DHCP. Many ISP
-   routers — the Vodafone Station among them — expose no such setting.
-2. Set DNS manually per device that opens the PWA: `1.1.1.1` plus
-   `2606:4700:4700::1111` on a dual-stack LAN. This disables rebind protection
-   for all domains on that device.
-3. [NextDNS](https://nextdns.io) — keeps rebind protection on and allowlists
-   just `<PLANT_HOST>`. Safest, needs an account.
+**Query the router only after the A record exists.** A lookup made beforehand
+gets cached as a negative answer and keeps returning `NOERROR` with `ANSWER: 0`
+for the TTL — indistinguishable from filtering. Wait out the TTL, or compare
+against `dig +short @1.1.1.1 <PLANT_HOST> A` before concluding anything.
+
+If the router really does filter, either configure it to hand clients a public
+resolver over DHCP, or set DNS per device that opens the PWA — `1.1.1.1`, or
+[NextDNS](https://nextdns.io) with `<PLANT_HOST>` allowlisted so rebind
+protection stays on everywhere else.
 
 The ESP32 is unaffected either way; `mqtt_host` is a literal IP.
 
