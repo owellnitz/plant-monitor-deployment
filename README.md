@@ -165,6 +165,34 @@ sudo nano .env
 `compose up` aborts if one is missing, so set them **before** the sync timer
 pulls a commit that needs them.
 
+#### Web Push (optional)
+
+Push notifications for worsening watering status need a VAPID keypair. Generate
+it **once**, on any machine with Node:
+
+```sh
+npx web-push generate-vapid-keys
+```
+
+| Variable | Value |
+|----------|-------|
+| `WEBPUSH_PUBLIC_KEY` | the generated public key (base64url) |
+| `WEBPUSH_PRIVATE_KEY` | the generated private key (base64url, secret) |
+| `WEBPUSH_SUBJECT` | optional contact for the push services: `mailto:you@example.com` or an `https://` URL |
+
+Keep the keypair. Rotating it invalidates every browser subscription, and each
+user has to re-enable notifications. Push needs the publicly trusted
+certificate from the [HTTPS](#https) setup — iOS rejects Web Push behind a
+private CA.
+
+With the keys unset the backend logs `Web Push is not configured`, answers
+`503` on `GET /api/push/vapid-key`, and the app hides the toggle. Malformed keys
+log `Web Push keys are invalid; notifications are off.`
+
+Check after deploy: `curl https://<PLANT_HOST>/api/push/vapid-key` returns `200`
+with `{"publicKey": "…"}`, and `docker compose logs backend` shows neither
+message above.
+
 ### 7. Log in to GHCR (root)
 
 The systemd service runs `docker compose` as **root**, so root must hold the
@@ -236,5 +264,5 @@ Rebuild + flash: `cargo run --release --features net`.
 | `caddy/Dockerfile` | Caddy rebuilt with the deSEC DNS module (for DNS-01) |
 | `caddy/Caddyfile` | TLS termination, reverse proxy, plain-HTTP OTA carve-out |
 | `mosquitto/mosquitto.conf` | Broker config (anonymous, LAN-only) |
-| `.env.example` | Template for the four required variables |
+| `.env.example` | Template for the four required and three optional Web Push variables |
 | `systemd/plant-monitor.{service,timer}` | Git-pull sync loop |
