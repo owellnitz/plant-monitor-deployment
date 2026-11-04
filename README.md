@@ -159,9 +159,8 @@ sudo nano .env
 | `POSTGRES_PASSWORD` | `openssl rand -base64 18 \| tr '+/' '-_'` |
 | `PLANT_HOST` | the deSEC hostname |
 | `DESEC_TOKEN` | the deSEC token |
-| `PLANT_IP` | `<static-ip>` — must equal the firmware's `mqtt_host` |
 
-`.env` is gitignored — `git pull` never touches it. All four are mandatory:
+`.env` is gitignored — `git pull` never touches it. All three are mandatory:
 `compose up` aborts if one is missing, so set them **before** the sync timer
 pulls a commit that needs them.
 
