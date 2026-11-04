@@ -22,7 +22,11 @@
 # no DNS, so it asks for firmware at http://<lan-ip>:80. Keep exactly those
 # endpoints reachable there. Everything else on the IP is bounced to the HTTPS
 # origin, so an old bookmark still lands on a working PWA.
-http://{$PLANT_IP} {
+#
+# Matched on :80, not the IP: the firmware sends `Host: backend`, which a
+# host-matched block never sees — Caddy redirected it (308) and every OTA check
+# came back unreachable. The path matcher below is the only gate.
+:80 {
 	@ota path /api/firmware/*
 	handle @ota {
 		reverse_proxy backend:8080
