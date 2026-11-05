@@ -4,7 +4,11 @@ services:
     ports:
       - "1883:1883"
     volumes:
-      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      # The directory, not the file: `git pull` replaces files with new ones,
+      # and a single-file mount keeps showing the old one. Mosquitto reads it
+      # only at start, so a changed mosquitto.conf needs `docker compose
+      # restart mqtt`.
+      - ./mosquitto:/mosquitto/config:ro
       - mosquitto-data:/mosquitto/data
     restart: unless-stopped
 
@@ -71,8 +75,12 @@ services:
       # This machine's static LAN IP. Must match the firmware's mqtt_host,
       # which is also where the ESP32 fetches OTA images over plain HTTP.
       PLANT_IP: ${PLANT_IP:?set in .env}
+    # --watch reloads the Caddyfile when the sync timer pulls a change.
+    command: caddy run --config /etc/caddy/Caddyfile --adapter caddyfile --watch
     volumes:
-      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      # The directory, not the file: `git pull` replaces files with new ones,
+      # and a single-file mount keeps showing the old one.
+      - ./caddy:/etc/caddy:ro
       - caddy-data:/data
       - caddy-config:/config
     depends_on:
