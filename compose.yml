@@ -4,7 +4,8 @@ services:
     ports:
       - "1883:1883"
     volumes:
-      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      # Dir, not file: a file mount misses `git pull` updates. Changes need a restart.
+      - ./mosquitto:/mosquitto/config:ro
       - mosquitto-data:/mosquitto/data
     restart: unless-stopped
 
@@ -71,8 +72,11 @@ services:
       # This machine's static LAN IP. Must match the firmware's mqtt_host,
       # which is also where the ESP32 fetches OTA images over plain HTTP.
       PLANT_IP: ${PLANT_IP:?set in .env}
+    # --watch: reload the Caddyfile when it changes.
+    command: caddy run --config /etc/caddy/Caddyfile --adapter caddyfile --watch
     volumes:
-      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      # Dir, not file: a file mount misses `git pull` updates.
+      - ./caddy:/etc/caddy:ro
       - caddy-data:/data
       - caddy-config:/config
     depends_on:
