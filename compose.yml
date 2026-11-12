@@ -4,7 +4,8 @@ services:
     ports:
       - "1883:1883"
     volumes:
-      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      # Dir, not file: a file mount misses `git pull` updates. Changes need a restart.
+      - ./mosquitto:/mosquitto/config:ro
       - mosquitto-data:/mosquitto/data
     restart: unless-stopped
 
@@ -68,8 +69,11 @@ services:
       PLANT_HOST: ${PLANT_HOST:?set in .env}
       # deSEC API token, scoped to that domain. From .env (gitignored).
       DESEC_TOKEN: ${DESEC_TOKEN:?set in .env}
+    # --watch: reload the Caddyfile when it changes.
+    command: caddy run --config /etc/caddy/Caddyfile --adapter caddyfile --watch
     volumes:
-      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      # Dir, not file: a file mount misses `git pull` updates.
+      - ./caddy:/etc/caddy:ro
       - caddy-data:/data
       - caddy-config:/config
     depends_on:
