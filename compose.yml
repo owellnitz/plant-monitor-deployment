@@ -83,6 +83,8 @@ services:
   # Polls GHCR every 5 min and recreates the backend container when a new
   # :latest is pushed by CI. --label-enable scopes it to the labeled
   # service only; --cleanup removes the superseded image afterwards.
+  # --include-restarting: by default Watchtower skips containers that are
+  # restart-looping, so a broken :latest could never be replaced by its fix.
   watchtower:
     image: containrrr/watchtower
     environment:
@@ -96,7 +98,7 @@ services:
       # pull :latest. Run `sudo docker login ghcr.io` BEFORE the first
       # `compose up`, else this bind mount creates a directory and auth fails.
       - /root/.docker/config.json:/config.json:ro
-    command: --interval 300 --label-enable --cleanup
+    command: --interval 300 --label-enable --cleanup --include-restarting
     restart: unless-stopped
 
 volumes:
