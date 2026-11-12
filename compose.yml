@@ -69,6 +69,8 @@ services:
       PLANT_HOST: ${PLANT_HOST:?set in .env}
       # deSEC API token, scoped to that domain. From .env (gitignored).
       DESEC_TOKEN: ${DESEC_TOKEN:?set in .env}
+    # --watch: reload the Caddyfile when it changes.
+    command: caddy run --config /etc/caddy/Caddyfile --adapter caddyfile --watch
     volumes:
       # Dir, not file: a file mount misses `git pull` updates.
       - ./caddy:/etc/caddy:ro
